@@ -1,5 +1,4 @@
-
-
+### Imports
 import os
 import argparse
 import numpy as np
@@ -10,17 +9,18 @@ def main():
     parser = argparse.ArgumentParser(description='Generate synthetic images.')
 
     # Adding command-line arguments
-    parser.add_argument('--nsim', type=int, default=4, help='Number of synthetic images created per subject')
-    parser.add_argument('--output_shape', type=int, default=300, help='Matrix size of synthetic images created')
-    parser.add_argument('--path2dataset', type=str, default='/home/marcantf/Data/training/HCP_20/100408', help='Path to segmentations (inputs to generative model)')
-    parser.add_argument('--o', type=str, default='/home/marcantf/Data/training/synthetic/test', help='Path where all synthetic images will be saved (outputs)')
+    parser.add_argument('--i', type=str, required=True, help='Path to segmentations (inputs to generative model). The script assumes that the folder contains all label maps in the first level (and not all in different folders).')
+    parser.add_argument('--o', type=str, required=True, help='Path where all synthetic images will be saved (outputs). Will be created if doesn t exist')
+    parser.add_argument('--nsim', type=int, default=1, help='Number of synthetic images created per subject')
+    parser.add_argument('--output_shape', type=int, default=288, help='Matrix size of synthetic images created. Default value is pretty random.')
     #parser.add_argument('--one_folder', type=int, default=1, help='Flag indicating if all subjects are in one folder')
-    parser.add_argument('--hcp', type=int, default=1, help='Flag indicating if the dataset is from the HCP')
+    parser.add_argument('--hcp', action='store_true', help='Indicate if the dataset is from the Human Connectome Project.')
+    parser.add_argument('--keep_id', action='store_true', help='To keep th subject ID from its original study or just use a linearly increasing new ID.')
 
     # Generation parameters
     parser.add_argument('--n_channels', type=int, default=1, help='Number of channels')
-    parser.add_argument('--n_neutral_labels', type=int, default=6, help='Number of non-sided labels in segmentations')
-    parser.add_argument('--prior_distributions', type=str, default='uniform', help='GMM sampling method (uniform or normal)')
+    parser.add_argument('--n_neutral_labels', type=int, default=6, help='Number of non-sided labels in label maps')
+    parser.add_argument('--prior_dist', type=str, default='uniform', help='GMM sampling method (uniform or normal)')
     parser.add_argument('--flipping', type=bool, default=True, help='Flag for applying flipping')
     parser.add_argument('--scaling_bounds', type=float, default=.15, help='Scaling bounds for spatial deformation')
     parser.add_argument('--rotation_bounds', type=float, default=15, help='Rotation bounds for spatial deformation')
@@ -37,13 +37,15 @@ def main():
     # Use parsed arguments in your script
     nsim = args.nsim
     output_shape = args.output_shape
-    path2dataset = args.path2dataset
+    path2input = args.i
     path2output = args.o
-    one_folder = args.one_folder
+    #one_folder = args.one_folder
     hcp = args.hcp
+    keep_id = args.keep_id
+
     n_channels = args.n_channels
     n_neutral_labels = args.n_neutral_labels
-    prior_distributions = args.prior_distributions
+    prior_distributions = args.prior_dist
     flipping = args.flipping
     scaling_bounds = args.scaling_bounds
     rotation_bounds = args.rotation_bounds
@@ -59,15 +61,21 @@ def main():
     path_segmentation_labels = '/home/marcantf/Code/SynthSeg/data/labels_classes_priors/homemade-priors/segmentation_labels_maf.npy'  # segmentation labels
     path_generation_classes = '/home/marcantf/Code/SynthSeg/data/labels_classes_priors/homemade-priors/generation_classes_maf.npy'  # classes generation
 
-    # If the dataset I'm using to create synthetic images is the Humman Connectome Project (HCP)
+    # If the dataset I'm using to create synthetic images is the Human Connectome Project (HCP)
     if hcp:
         subsubdir = 'T1w'
         aseg_name = 'aseg_noCC.nii.gz'  # !!! this naming convention is subject to modification !!!
         # fullpath2aseg = [os.path.join(f, subsubdir, aseg_name) for f in path2sub]
-        fullpath2aseg = [os.path.join(path2dataset, subsubdir, aseg_name)]
+        fullpath2aseg = [os.path.join(path2input, subsubdir, aseg_name)]
 
-    else: # to be coded
-        exit("Code not written yet. Sorry, come back later h8ter.")
+    else:
+
+        all_labelmaps = [n for n in os.listdir(path2input) if '.nii.gz' in n]
+        print("%s different label maps detected in directory %s" % (len(all_labelmaps), path2input))
+        all_paths2labelmaps = [os.path.join(path2input, nn) for nn in all_labelmaps]
+
+        if keep_id:
+            all_subids = [s[s.find('aseg_noCC_') + len('aseg_noCC_'):s.find('.nii.gz')].strip() for s in all_paths2labelmaps if 'aseg_noCC_' in s and '.nii.gz' in s]
 
     ### Preparing the output folder
     path2imgs = os.path.join(path2output, 'imagesTr') # following nnUNet naming convention
@@ -82,13 +90,16 @@ def main():
 
 
     ### Generate synthetic images for all subjects in the dataset
-    for idx, sub in enumerate(fullpath2aseg): #loop through all subjects
+    for idx, sub in enumerate(all_paths2labelmaps): #loop through all subjects
 
-        print('Processing Subject %s!' % (sub))
+        if keep_id:
+            print('Processing Subject %s!' % (all_subids[idx]))
+        else:
+            print('Processing Subject #%s!' % (idx))
 
         for n in range(nsim): #loop through the number of synthetic image you want to create from each subject
 
-            print('Creating synthetic image #%s for subject #%s!' % (n, sub))
+            print('Creating synthetic image #%s for Subject #%s.' % (n, idx))
 
             # instantiate BrainGenerator object
             brain_generator = BrainGenerator(labels_dir=sub,
@@ -118,13 +129,21 @@ def main():
             im.astype(np.float16)
             lab.astype(np.int16)
 
-            syn_filename = 'image_%s_0000.nii.gz' %(sub) #synthetic image filename (following nnUNet convention)
-            seg_filename = 'image_%s.nii.gz' %(sub) # modified/augmented label map filename (following nnUNet convention)
+            if keep_id:
+                syn_filename = 'image_%s_0000.nii.gz' %(all_subids[idx]) #synthetic image filename (following nnUNet convention)
+                seg_filename = 'image_%s.nii.gz' %(all_subids[idx]) # modified/augmented label map filename (following nnUNet convention)
+            else:
+                syn_filename = 'image_%s_0000.nii.gz' %(idx) #synthetic image filename (following nnUNet convention)
+                seg_filename = 'image_%s.nii.gz' %(idx) # modified/augmented label map filename (following nnUNet convention)
 
             # save output synthetic image and augmented label map
             utils.save_volume(im, brain_generator.aff, brain_generator.header, os.path.join(path2imgs, syn_filename))
             utils.save_volume(lab, brain_generator.aff, brain_generator.header, os.path.join(path2segs, seg_filename))
 
+        if keep_id:
+            print('Done processing Subject %s!' % (all_subids[idx]))
+        else:
+            print('Done processing Subject #%s!' % (idx))
 
 
 if __name__ == '__main__':
