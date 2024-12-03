@@ -52,8 +52,8 @@ class BrainGenerator:
                  nonlin_std=4.,
                  nonlin_scale=.04,
                  randomise_res=True,
-                 max_res_iso=4.,
-                 max_res_aniso=8.,
+                 max_res_iso=4., #MAF: Q: Simply modify this line to max the downsampling to 1mm3?
+                 max_res_aniso=1.,
                  data_res=None,
                  thickness=None,
                  bias_field_std=.7,

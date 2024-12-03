@@ -46,7 +46,7 @@ def labels_to_image_model(labels_shape,
                           nonlin_scale=.0625,
                           randomise_res=False,
                           max_res_iso=4.,
-                          max_res_aniso=8.,
+                          max_res_aniso=1.,
                           data_res=None,
                           thickness=None,
                           bias_field_std=.5,
@@ -221,7 +221,7 @@ def labels_to_image_model(labels_shape,
 
     # resample labels at target resolution
     if crop_shape != output_shape:
-        labels = l2i_et.resample_tensor(labels, output_shape, interp_method='nearest')
+        labels = l2i_et.resample_tensor(labels, output_shape, interp_method='nearest') # MAF:
 
     # map generation labels to segmentation values
     labels = layers.ConvertLabels(generation_labels, dest_values=output_labels, name='labels_out')(labels)
